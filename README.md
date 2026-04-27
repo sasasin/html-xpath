@@ -40,3 +40,9 @@ If Playwright browsers are not installed yet, install Chromium once:
 ```bash
 uv run --with playwright playwright install chromium
 ```
+
+## Tests
+
+```bash
+uv run --group dev pytest
+```

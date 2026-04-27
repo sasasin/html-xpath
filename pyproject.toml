@@ -10,9 +10,26 @@ dependencies = [
   "playwright>=1.45",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+]
+
 [project.scripts]
 html-xpath = "html_xpath.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+addopts = "--cov=html_xpath --cov-branch --cov-report=term-missing --cov-fail-under=95"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["html_xpath"]
+
+[tool.coverage.report]
+show_missing = true

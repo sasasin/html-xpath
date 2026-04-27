@@ -44,5 +44,5 @@ uv run --with playwright playwright install chromium
 ## Tests
 
 ```bash
-uv run --group dev pytest
+uv run --group dev pytest --cov-report=xml --cov-report=html
 ```

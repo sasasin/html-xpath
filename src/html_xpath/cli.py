@@ -3,98 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
-from typing import Any
+import time
+from collections.abc import Iterable
 
+from lxml import etree, html
+from lxml.html import HtmlElement
 from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
-
-
-EXTRACT_SCRIPT = """
-({ includeXPaths, excludeXPaths }) => {
-  const resultType = XPathResult.ORDERED_NODE_SNAPSHOT_TYPE;
-
-  function xpathNodes(xpath, contextNode = document) {
-    const snapshot = document.evaluate(xpath, contextNode, null, resultType, null);
-    const nodes = [];
-    for (let i = 0; i < snapshot.snapshotLength; i += 1) {
-      const node = snapshot.snapshotItem(i);
-      if (node && node.nodeType === Node.ELEMENT_NODE) {
-        nodes.push(node);
-      }
-    }
-    return nodes;
-  }
-
-  function nodePath(root, target) {
-    const path = [];
-    let current = target;
-
-    while (current && current !== root) {
-      const parent = current.parentNode;
-      if (!parent) {
-        return null;
-      }
-      path.push(Array.prototype.indexOf.call(parent.childNodes, current));
-      current = parent;
-    }
-
-    return current === root ? path.reverse() : null;
-  }
-
-  function nodeAtPath(root, path) {
-    let current = root;
-    for (const index of path) {
-      if (!current || !current.childNodes || index >= current.childNodes.length) {
-        return null;
-      }
-      current = current.childNodes[index];
-    }
-    return current;
-  }
-
-  function removalOrder(a, b) {
-    const minLength = Math.min(a.length, b.length);
-    for (let i = 0; i < minLength; i += 1) {
-      if (a[i] !== b[i]) {
-        return b[i] - a[i];
-      }
-    }
-    return b.length - a.length;
-  }
-
-  const includeNodes = includeXPaths.flatMap((xpath) => xpathNodes(xpath));
-  const excludedNodes = excludeXPaths.flatMap((xpath) => xpathNodes(xpath));
-  const excludedSet = new Set(excludedNodes);
-  const fragments = [];
-
-  for (const root of includeNodes) {
-    if (excludedSet.has(root) || excludedNodes.some((node) => node.contains(root))) {
-      continue;
-    }
-
-    const clone = root.cloneNode(true);
-    const paths = excludedNodes
-      .filter((node) => root.contains(node))
-      .map((node) => nodePath(root, node))
-      .filter((path) => path !== null)
-      .sort(removalOrder);
-
-    for (const path of paths) {
-      const node = nodeAtPath(clone, path);
-      if (node && node.parentNode) {
-        node.parentNode.removeChild(node);
-      }
-    }
-
-    fragments.push(clone.outerHTML);
-  }
-
-  return fragments;
-}
-"""
 
 
 def positive_int(value: str) -> int:
@@ -178,7 +98,133 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def extract_fragments(args: argparse.Namespace) -> list[str]:
+def element_nodes(nodes: Iterable[object]) -> list[HtmlElement]:
+    return [node for node in nodes if isinstance(node, HtmlElement)]
+
+
+def parse_html(content: str) -> HtmlElement:
+    return html.fromstring(content)
+
+
+def xpath_elements(document: HtmlElement, xpath: str) -> list[HtmlElement]:
+    try:
+        return element_nodes(document.xpath(xpath))
+    except etree.XPathError as exc:
+        raise ValueError(f"invalid XPath {xpath!r}: {exc}") from exc
+
+
+def contains(root: HtmlElement, node: HtmlElement) -> bool:
+    current: HtmlElement | None = node
+    while current is not None:
+        if current is root:
+            return True
+        current = current.getparent()
+    return False
+
+
+def path_from_root(root: HtmlElement, node: HtmlElement) -> tuple[int, ...] | None:
+    path: list[int] = []
+    current: HtmlElement | None = node
+
+    while current is not None and current is not root:
+        parent = current.getparent()
+        if parent is None:
+            return None
+        path.append(parent.index(current))
+        current = parent
+
+    if current is not root:
+        return None
+
+    return tuple(reversed(path))
+
+
+def node_at_path(root: HtmlElement, path: tuple[int, ...]) -> HtmlElement | None:
+    current = root
+    for index in path:
+        if index >= len(current):
+            return None
+        current = current[index]
+    return current
+
+
+def removal_order(path: tuple[int, ...]) -> tuple[tuple[int, ...], int]:
+    return tuple(-index for index in path), -len(path)
+
+
+def remove_excluded_descendants(
+    root: HtmlElement,
+    excluded_nodes: list[HtmlElement],
+) -> HtmlElement:
+    clone = copy.deepcopy(root)
+    paths = [
+        path
+        for node in excluded_nodes
+        if node is not root and contains(root, node)
+        for path in [path_from_root(root, node)]
+        if path is not None
+    ]
+
+    for path in sorted(paths, key=removal_order):
+        node = node_at_path(clone, path)
+        if node is not None and node.getparent() is not None:
+            node.getparent().remove(node)
+
+    return clone
+
+
+def fragments_from_html(
+    content: str,
+    include_xpaths: list[str],
+    exclude_xpaths: list[str],
+) -> list[str]:
+    document = parse_html(content)
+    include_nodes = [
+        node
+        for xpath in include_xpaths
+        for node in xpath_elements(document, xpath)
+    ]
+    excluded_nodes = [
+        node
+        for xpath in exclude_xpaths
+        for node in xpath_elements(document, xpath)
+    ]
+
+    fragments = []
+    for root in include_nodes:
+        if any(node is root or contains(node, root) for node in excluded_nodes):
+            continue
+
+        clone = remove_excluded_descendants(root, excluded_nodes)
+        fragments.append(
+            html.tostring(clone, encoding="unicode", method="html", with_tail=False)
+        )
+
+    return fragments
+
+
+def wait_for_xpath_in_html(page: Page, xpath: str, timeout: int) -> str:
+    deadline = time.monotonic() + timeout / 1000
+    last_error: Exception | None = None
+
+    while True:
+        content = page.content()
+        try:
+            if xpath_elements(parse_html(content), xpath):
+                return content
+        except ValueError as exc:
+            raise exc
+        except Exception as exc:
+            last_error = exc
+
+        if time.monotonic() >= deadline:
+            detail = f": {last_error}" if last_error else ""
+            raise TimeoutError(f"timed out waiting for XPath {xpath!r}{detail}")
+
+        time.sleep(0.1)
+
+
+def fetch_rendered_html(args: argparse.Namespace) -> str:
     wait_xpath = args.wait_for_xpath or args.include_xpaths[0]
 
     with sync_playwright() as playwright:
@@ -187,23 +233,16 @@ def extract_fragments(args: argparse.Namespace) -> list[str]:
         try:
             page = browser.new_page()
             page.goto(args.url, wait_until=args.wait_until, timeout=args.timeout)
-            page.locator(f"xpath={wait_xpath}").first.wait_for(timeout=args.timeout)
-            fragments: Any = page.evaluate(
-                EXTRACT_SCRIPT,
-                {
-                    "includeXPaths": args.include_xpaths,
-                    "excludeXPaths": args.exclude_xpath,
-                },
-            )
+            content = wait_for_xpath_in_html(page, wait_xpath, args.timeout)
         finally:
             browser.close()
 
-    if not isinstance(fragments, list) or not all(
-        isinstance(fragment, str) for fragment in fragments
-    ):
-        raise RuntimeError("unexpected extraction result from browser")
+    return content
 
-    return fragments
+
+def extract_fragments(args: argparse.Namespace) -> list[str]:
+    content = fetch_rendered_html(args)
+    return fragments_from_html(content, args.include_xpaths, args.exclude_xpath)
 
 
 def main() -> int:
@@ -213,6 +252,12 @@ def main() -> int:
         fragments = extract_fragments(args)
     except PlaywrightTimeoutError as exc:
         print(f"html-xpath: timed out: {exc}", file=sys.stderr)
+        return 2
+    except TimeoutError as exc:
+        print(f"html-xpath: timed out: {exc}", file=sys.stderr)
+        return 2
+    except ValueError as exc:
+        print(f"html-xpath: {exc}", file=sys.stderr)
         return 2
     except PlaywrightError as exc:
         print(f"html-xpath: playwright error: {exc}", file=sys.stderr)

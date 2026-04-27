@@ -1,7 +1,7 @@
 # html-xpath
 
-Render a web page with Playwright and extract only the HTML elements matched by
-XPath.
+Render a web page with Playwright, parse the rendered HTML with lxml, and
+extract only the HTML elements matched by XPath.
 
 ## Usage
 

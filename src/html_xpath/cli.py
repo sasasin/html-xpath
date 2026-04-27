@@ -180,14 +180,10 @@ def fragments_from_html(
 ) -> list[str]:
     document = parse_html(content)
     include_nodes = [
-        node
-        for xpath in include_xpaths
-        for node in xpath_elements(document, xpath)
+        node for xpath in include_xpaths for node in xpath_elements(document, xpath)
     ]
     excluded_nodes = [
-        node
-        for xpath in exclude_xpaths
-        for node in xpath_elements(document, xpath)
+        node for xpath in exclude_xpaths for node in xpath_elements(document, xpath)
     ]
 
     fragments = []

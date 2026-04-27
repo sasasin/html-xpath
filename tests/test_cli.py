@@ -21,7 +21,9 @@ def test_positive_int_rejects_invalid_values(value: str) -> None:
         cli.positive_int(value)
 
 
-def test_parse_args_combines_option_and_positional_xpaths(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_parse_args_combines_option_and_positional_xpaths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
@@ -55,7 +57,9 @@ def test_parse_args_requires_xpath(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_xpath_elements_returns_only_elements() -> None:
     document = cli.parse_html("<main><a href='/x'>Link</a><p>Text</p></main>")
 
-    assert [node.tag for node in cli.xpath_elements(document, "//a | //p | //@href")] == [
+    assert [
+        node.tag for node in cli.xpath_elements(document, "//a | //p | //@href")
+    ] == [
         "a",
         "p",
     ]
@@ -83,7 +87,9 @@ def test_contains_handles_self_ancestor_and_unrelated_nodes() -> None:
 
 
 def test_path_helpers_cover_valid_invalid_and_same_node_paths() -> None:
-    document = cli.parse_html("<main><section><p>A</p></section><section><p>B</p></section></main>")
+    document = cli.parse_html(
+        "<main><section><p>A</p></section><section><p>B</p></section></main>"
+    )
     main = cli.xpath_elements(document, "//main")[0]
     second_paragraph = cli.xpath_elements(document, "//section[2]/p")[0]
     detached = cli.parse_html("<aside><p>Other</p></aside>")
@@ -105,7 +111,10 @@ def test_remove_excluded_descendants_removes_siblings_without_index_shift() -> N
 
     clone = cli.remove_excluded_descendants(main, excluded)
 
-    assert html.tostring(clone, encoding="unicode") == "<main><p>A</p><p>B</p><p>C</p></main>"
+    assert (
+        html.tostring(clone, encoding="unicode")
+        == "<main><p>A</p><p>B</p><p>C</p></main>"
+    )
     assert html.tostring(main, encoding="unicode") == (
         "<main><p>A</p><nav>Skip1</nav><p>B</p><aside>Skip2</aside><p>C</p></main>"
     )
@@ -136,7 +145,9 @@ def test_remove_excluded_descendants_ignores_paths_that_no_longer_resolve(
     assert html.tostring(clone, encoding="unicode") == "<main><p>A</p></main>"
 
 
-def test_fragments_from_html_extracts_multiple_fragments_and_excludes_children() -> None:
+def test_fragments_from_html_extracts_multiple_fragments_and_excludes_children() -> (
+    None
+):
     fragments = cli.fragments_from_html(
         "<html><body><main><article><p>A</p><nav>Skip</nav></article></main>"
         "<footer>Foot</footer></body></html>",
@@ -157,7 +168,9 @@ def test_fragments_from_html_skips_roots_inside_excluded_nodes() -> None:
     assert fragments == ["<p>Visible</p>"]
 
 
-def test_wait_for_xpath_in_html_returns_when_xpath_appears(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_wait_for_xpath_in_html_returns_when_xpath_appears(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class Page:
         def __init__(self) -> None:
             self.contents = iter(["<main></main>", "<main><p>Ready</p></main>"])
@@ -168,7 +181,9 @@ def test_wait_for_xpath_in_html_returns_when_xpath_appears(monkeypatch: pytest.M
     sleeps: list[float] = []
     monkeypatch.setattr(cli.time, "sleep", sleeps.append)
 
-    assert cli.wait_for_xpath_in_html(Page(), "//p", 1000) == "<main><p>Ready</p></main>"
+    assert (
+        cli.wait_for_xpath_in_html(Page(), "//p", 1000) == "<main><p>Ready</p></main>"
+    )
     assert sleeps == [0.1]
 
 
@@ -329,14 +344,20 @@ def test_fetch_rendered_html_closes_browser_when_wait_fails(
     assert events == ["goto", "close", "exit"]
 
 
-def test_extract_fragments_fetches_html_then_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_extract_fragments_fetches_html_then_parses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     args = argparse.Namespace(include_xpaths=["//p"], exclude_xpath=["//span"])
-    monkeypatch.setattr(cli, "fetch_rendered_html", lambda args: "<p>A<span>B</span></p>")
+    monkeypatch.setattr(
+        cli, "fetch_rendered_html", lambda args: "<p>A<span>B</span></p>"
+    )
 
     assert cli.extract_fragments(args) == ["<p>A</p>"]
 
 
-def test_main_prints_json(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_prints_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     args = argparse.Namespace(json=True, separator="\n")
     monkeypatch.setattr(cli, "parse_args", lambda: args)
     monkeypatch.setattr(cli, "extract_fragments", lambda args: ["<p>あ</p>"])

@@ -1,0 +1,36 @@
+[project]
+name = "html-xpath"
+version = "0.1.0"
+description = "Fetch rendered HTML fragments from a URL using XPath selectors."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+  "lxml>=5.0",
+  "playwright>=1.45",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=5.0",
+  "ruff>=0.8",
+]
+
+[project.scripts]
+html-xpath = "html_xpath.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+addopts = "--cov=html_xpath --cov-branch --cov-report=term-missing --cov-fail-under=95"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["html_xpath"]
+
+[tool.coverage.report]
+show_missing = true

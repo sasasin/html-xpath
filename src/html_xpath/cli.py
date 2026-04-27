@@ -1,11 +1,4 @@
-#!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.10"
-# dependencies = [
-#   "playwright>=1.45",
-# ]
-# ///
-"""Fetch rendered HTML fragments by XPath."""
+"""Command line interface for html-xpath."""
 
 from __future__ import annotations
 

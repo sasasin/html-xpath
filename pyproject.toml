@@ -3,7 +3,7 @@ name = "html-xpath"
 version = "0.1.0"
 description = "Fetch rendered HTML fragments from a URL using XPath selectors."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 license = { file = "LICENSE" }
 dependencies = [
   "lxml>=5.0",
@@ -23,6 +23,9 @@ html-xpath = "html_xpath.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/html_xpath"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=html_xpath --cov-branch --cov-report=term-missing --cov-fail-under=95"

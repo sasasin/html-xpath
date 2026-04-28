@@ -5,6 +5,15 @@ extract only the HTML elements matched by XPath.
 
 ## Usage
 
+Install the CLI directly from GitHub:
+
+```bash
+uv tool install git+https://github.com/sasasin/html-xpath.git
+html-xpath --help
+```
+
+For local development, run the command through uv:
+
 ```bash
 uv run html-xpath "https://example.com" "//main"
 ```
